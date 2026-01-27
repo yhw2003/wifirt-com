@@ -4,7 +4,7 @@
 # =========================
 
 add_library(pcap-core STATIC
-    "src/print_hello.c"
+    "src/start_demo.c"
 )
 
 # 公共头文件目录：对外暴露 include/

@@ -5,7 +5,7 @@
 extern "C" {
 #endif
 
-int print_hello();
+int start_demo();
 
 #ifdef __cplusplus
 }
