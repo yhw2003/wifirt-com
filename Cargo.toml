@@ -7,4 +7,5 @@ edition = "2024"
 cmake = "^0.1"
 
 [dependencies]
+tokio = { version = "1.49.0", features = ["full"] }
 # libc = "0.2.180"
