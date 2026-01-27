@@ -1,0 +1,10 @@
+[package]
+name = "wifirt-com"
+version = "0.1.0"
+edition = "2024"
+
+[build-dependencies]
+cmake = "^0.1"
+
+[dependencies]
+# libc = "0.2.180"
