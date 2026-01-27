@@ -1,0 +1,3 @@
+[submodule "drivers/rlt8812au"]
+	path = drivers/rlt8812au
+	url = https://github.com/yhw2003/rtl8812au_aircrack
