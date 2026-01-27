@@ -10,4 +10,3 @@ int print_hello();
 #ifdef __cplusplus
 }
 #endif
-
