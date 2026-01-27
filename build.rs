@@ -6,7 +6,12 @@ fn main() {
   // Cargo 会在构建时提供目标三元组，比如 aarch64-unknown-linux-gnu
   let target = env::var("TARGET").unwrap_or_default();
   let mut dst = cmake::Config::new("pcap-core");
-    dst.define("CMAKE_EXPORT_COMPILE_COMMANDS", "ON");
+  dst.define("CMAKE_EXPORT_COMPILE_COMMANDS", "ON");
+  dst.define("INSTALL_VCPKG_PCAP_STATIC", "ON");
+  let vcpkg_root = PathBuf::from(env::var("VCPKG_ROOT").unwrap());
+  let toolchain_file = vcpkg_root.join("scripts").join("buildsystems").join("vcpkg.cmake");
+
+  dst.define("CMAKE_TOOLCHAIN_FILE", toolchain_file);
     // 仅当编译 aarch64 linux 目标时，给 CMake 传 vcpkg triplet
   if target == "aarch64-unknown-linux-gnu" {
     dst.define("VCPKG_TARGET_TRIPLET", "arm64-linux");
