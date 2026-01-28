@@ -4,6 +4,7 @@
 # =========================
 
 add_library(pcap-core STATIC
+    "src/pcap_capture.c"
     "src/start_demo.c"
 )
 
