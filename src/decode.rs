@@ -1,25 +1,20 @@
 use ieee80211::{
-  common::FrameType,
-  match_frames,
-  mgmt_frame::{BeaconFrame, ProbeRequestFrame, ProbeResponseFrame},
-  GenericFrame,
+  common::{FrameType, ManagementFrameSubtype},
+  mgmt_frame::body::{BeaconBody, ProbeRequestBody, ProbeResponseBody},
+  scroll::ctx::TryFromCtx,
 };
 
-use crate::radiotap::{freq_to_channel, parse_radiotap};
+use crate::{capture::CapturedPacket, radiotap::freq_to_channel};
 
-pub fn handle_packet(bytes: &[u8], caplen: u32, len: u32, ts_sec: u64, ts_usec: u32) {
+pub fn handle_packet(packet: CapturedPacket<'_>) {
   println!("=== Packet ===");
   println!(
     "PCAP: time={}.{:06} caplen={} len={}",
-    ts_sec, ts_usec, caplen, len
+    packet.ts_sec, packet.ts_usec, packet.caplen, packet.len
   );
 
-  let Some((rt, rt_len)) = parse_radiotap(bytes) else {
-    println!("Radiotap: <parse failed>");
-    return;
-  };
-
-  print!("Radiotap: len={}", rt_len);
+  let rt = packet.radiotap;
+  print!("Radiotap: len={}", packet.radiotap_len);
   if rt.has_dbm_signal {
     print!(" rssi={}dBm", rt.dbm_signal);
   }
@@ -42,22 +37,9 @@ pub fn handle_packet(bytes: &[u8], caplen: u32, len: u32, ts_sec: u64, ts_usec: 
   }
   println!();
 
-  if rt_len >= bytes.len() {
-    return;
-  }
-  let p80211 = &bytes[rt_len..];
-
-  let generic = match GenericFrame::new(p80211, false) {
-    Ok(frame) => frame,
-    Err(_) => {
-      println!("802.11: <parse failed>");
-      return;
-    }
-  };
-
-  let fcf = generic.frame_control_field();
-  let flags = fcf.flags();
-  let frame_type = fcf.frame_type();
+  let dot11 = &packet.dot11;
+  let flags = dot11.flags;
+  let frame_type = dot11.frame_type;
 
   println!(
     "802.11: type={:?} ToDS={} FromDS={} Retry={} Protected={} PwrMgmt={} MoreData={}",
@@ -70,18 +52,15 @@ pub fn handle_packet(bytes: &[u8], caplen: u32, len: u32, ts_sec: u64, ts_usec: 
     flags.more_data()
   );
 
-  let addr1 = generic.address_1();
-  let addr2 = generic.address_2();
-  let addr3 = generic.address_3();
   println!(
     "ADDR: A1={} A2={} A3={}",
-    addr1,
-    opt_mac_to_string(addr2),
-    opt_mac_to_string(addr3)
+    dot11.address_1,
+    opt_mac_to_string(dot11.address_2),
+    opt_mac_to_string(dot11.address_3)
   );
 
-  let duration = generic.duration();
-  if let Some(seq) = generic.sequence_control() {
+  let duration = dot11.duration;
+  if let Some(seq) = dot11.sequence_control {
     println!(
       "SEQ: seq={} frag={} duration={}",
       seq.sequence_number(),
@@ -93,7 +72,7 @@ pub fn handle_packet(bytes: &[u8], caplen: u32, len: u32, ts_sec: u64, ts_usec: 
   }
 
   if matches!(frame_type, FrameType::Management(_)) {
-    print_ssid_if_any(p80211);
+    print_ssid_if_any(frame_type, packet.payload);
   }
 
   println!();
@@ -103,19 +82,25 @@ fn opt_mac_to_string(addr: Option<ieee80211::mac_parser::MACAddress>) -> String 
   addr.map_or_else(|| "-".to_string(), |a| a.to_string())
 }
 
-fn print_ssid_if_any(p80211: &[u8]) {
-  let _ = match_frames! {
-    p80211,
-    beacon = BeaconFrame => {
-      print_ssid("Beacon", beacon.body.ssid());
+fn print_ssid_if_any(frame_type: FrameType, payload: &[u8]) {
+  match frame_type {
+    FrameType::Management(ManagementFrameSubtype::Beacon) => {
+      if let Ok((body, _)) = BeaconBody::try_from_ctx(payload, ()) {
+        print_ssid("Beacon", body.ssid());
+      }
     }
-    probe_resp = ProbeResponseFrame => {
-      print_ssid("ProbeResp", probe_resp.body.ssid());
+    FrameType::Management(ManagementFrameSubtype::ProbeResponse) => {
+      if let Ok((body, _)) = ProbeResponseBody::try_from_ctx(payload, ()) {
+        print_ssid("ProbeResp", body.ssid());
+      }
     }
-    probe_req = ProbeRequestFrame => {
-      print_ssid("ProbeReq", probe_req.body.ssid());
+    FrameType::Management(ManagementFrameSubtype::ProbeRequest) => {
+      if let Ok((body, _)) = ProbeRequestBody::try_from_ctx(payload, ()) {
+        print_ssid("ProbeReq", body.ssid());
+      }
     }
-  };
+    _ => {}
+  }
 }
 
 fn print_ssid(kind: &str, ssid: Option<&str>) {
