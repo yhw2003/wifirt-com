@@ -1,6 +1,9 @@
-use std::{env, fs, path::PathBuf};
+use std::{
+  env, fs,
+  path::{Path, PathBuf},
+};
 
-pub fn export_compile_commands(dst: &PathBuf) {
+pub fn export_compile_commands(dst: &Path) {
   let build_dir = dst.join("build");
   let compile_commands = build_dir.join("compile_commands.json");
 
