@@ -2,7 +2,6 @@
 
 #include <pcap.h>
 #include <stdio.h>
-#include <string.h>
 
 typedef struct {
   pcap_packet_cb cb;
@@ -15,8 +14,8 @@ static void pcap_forward_cb(u_char *user, const struct pcap_pkthdr *h,
   if (!ctx || !ctx->cb || !h || !bytes)
     return;
 
-  ctx->cb(bytes, (uint32_t)h->caplen, (uint32_t)h->len,
-          (uint64_t)h->ts.tv_sec, (uint32_t)h->ts.tv_usec, ctx->user);
+  ctx->cb(bytes, (uint32_t)h->caplen, (uint32_t)h->len, (uint64_t)h->ts.tv_sec,
+          (uint32_t)h->ts.tv_usec, ctx->user);
 }
 
 int pcap_start_capture(const char *dev, const char *filter, int snaplen,
