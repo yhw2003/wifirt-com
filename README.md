@@ -17,3 +17,7 @@
   cargo build
 ```
 目前交叉编译只支持`aarch64-unknown-linux-gnu`
+
+## 自定义 payload 注入
+
+接收端已支持解析自定义 payload（`WFRT` 魔术字节）。注入方式见 `docs/INJECT.md`。
