@@ -1,7 +1,4 @@
-mod capture;
-mod channel;
-mod decode;
-mod radiotap;
+use wifirt::{capture, channel, decode};
 
 #[tokio::main]
 async fn main() {

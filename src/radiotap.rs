@@ -40,11 +40,7 @@ fn align_up(off: usize, align: usize) -> usize {
     return off;
   }
   let r = off % align;
-  if r == 0 {
-    off
-  } else {
-    off + (align - r)
-  }
+  if r == 0 { off } else { off + (align - r) }
 }
 
 pub fn parse_radiotap(pkt: &[u8]) -> Result<(RtMeta, usize), RadiotapError> {
@@ -89,14 +85,16 @@ pub fn parse_radiotap(pkt: &[u8]) -> Result<(RtMeta, usize), RadiotapError> {
   Ok((meta, rt_len))
 }
 
-fn parse_fields(rt_slice: &[u8], mut cur: usize, present_word0: u32) -> Result<RtMeta, RadiotapError> {
+fn parse_fields(
+  rt_slice: &[u8],
+  mut cur: usize,
+  present_word0: u32,
+) -> Result<RtMeta, RadiotapError> {
   let mut meta = RtMeta::default();
-  let mut input = rt_slice
-    .get(cur..)
-    .ok_or(RadiotapError::InvalidLength {
-      len: rt_slice.len(),
-      pkt_len: rt_slice.len(),
-    })?;
+  let mut input = rt_slice.get(cur..).ok_or(RadiotapError::InvalidLength {
+    len: rt_slice.len(),
+    pkt_len: rt_slice.len(),
+  })?;
 
   for bit in 0..32 {
     if bit == 31 || (present_word0 & (1u32 << bit)) == 0 {
@@ -185,24 +183,15 @@ fn parse_fields(rt_slice: &[u8], mut cur: usize, present_word0: u32) -> Result<R
 }
 
 fn parse_u8<'a>(input: &'a [u8], ctx: &'static str) -> Result<(&'a [u8], u8), RadiotapError> {
-  nom_u8::<_, nom::error::Error<&[u8]>>(input)
-    .map_err(|_| RadiotapError::ParseError(ctx))
+  nom_u8::<_, nom::error::Error<&[u8]>>(input).map_err(|_| RadiotapError::ParseError(ctx))
 }
 
-fn parse_le_u16<'a>(
-  input: &'a [u8],
-  ctx: &'static str,
-) -> Result<(&'a [u8], u16), RadiotapError> {
-  le_u16::<_, nom::error::Error<&[u8]>>(input)
-    .map_err(|_| RadiotapError::ParseError(ctx))
+fn parse_le_u16<'a>(input: &'a [u8], ctx: &'static str) -> Result<(&'a [u8], u16), RadiotapError> {
+  le_u16::<_, nom::error::Error<&[u8]>>(input).map_err(|_| RadiotapError::ParseError(ctx))
 }
 
-fn parse_le_u32<'a>(
-  input: &'a [u8],
-  ctx: &'static str,
-) -> Result<(&'a [u8], u32), RadiotapError> {
-  le_u32::<_, nom::error::Error<&[u8]>>(input)
-    .map_err(|_| RadiotapError::ParseError(ctx))
+fn parse_le_u32<'a>(input: &'a [u8], ctx: &'static str) -> Result<(&'a [u8], u32), RadiotapError> {
+  le_u32::<_, nom::error::Error<&[u8]>>(input).map_err(|_| RadiotapError::ParseError(ctx))
 }
 
 fn skip_bytes<'a>(

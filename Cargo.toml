@@ -6,6 +6,12 @@ edition = "2024"
 [build-dependencies]
 cmake = "^0.1"
 
+[lib]
+name = "wifirt"
+
+[[example]]
+name = "minimal"
+
 [dependencies]
 ieee80211 = "0.5.9"
 nom = "7.1.3"
