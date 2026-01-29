@@ -14,6 +14,7 @@
 - Avoid `unwrap()`/`expect()` in library code unless justified; in tests it's acceptable.
 - Handle errors via `Result` and meaningful error messages.
 - Keep clippy clean; do not add `#[allow(clippy::...)]` unless there's a strong reason and comment why.
+- 使用thiserror定义自己的错误类，不要让第三方库的Result类型在代码里传递。
 
 
 ## Goal

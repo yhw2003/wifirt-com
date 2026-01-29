@@ -117,7 +117,7 @@ fn parse_packet<'a>(
   ts_sec: u64,
   ts_usec: u32,
 ) -> Option<CapturedPacket<'a>> {
-  let (rt, rt_len) = parse_radiotap(bytes)?;
+  let (rt, rt_len) = parse_radiotap(bytes).ok()?;
   let p80211 = bytes.get(rt_len..)?;
   let generic = GenericFrame::new(p80211, false).ok()?;
   let fcf = generic.frame_control_field();
