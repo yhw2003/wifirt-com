@@ -1,4 +1,4 @@
-use wifirt::{capture, channel, decode};
+use wifirt::{capture, decode};
 
 #[tokio::main]
 async fn main() {
