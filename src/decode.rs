@@ -4,10 +4,7 @@ use ieee80211::{
   scroll::ctx::TryFromCtx,
 };
 
-use crate::{capture::CapturedPacket, radiotap::freq_to_channel};
-
-const WFRT_MAGIC: &[u8; 4] = b"WFRT";
-const WFRT_HEADER_LEN: usize = 6;
+use crate::{capture::CapturedPacket, protocol::decode_wfirt_payload, radiotap::freq_to_channel};
 
 pub fn handle_packet(packet: CapturedPacket<'_>) {
   println!("=== Packet ===");
@@ -78,9 +75,11 @@ pub fn handle_packet(packet: CapturedPacket<'_>) {
     print_ssid_if_any(frame_type, packet.payload);
   }
 
-  if let Some(payload) = extract_wifirt_payload(packet.payload) {
+  if let Some(payload) = decode_wfirt_payload(packet.payload) {
     println!("WFRT: len={} bytes", payload.len());
     println!("WFRT: {}", hex_bytes(payload));
+    let decoded = String::from_utf8(payload.to_vec());
+    println!("{decoded:?}")
   }
 
   println!();
@@ -119,19 +118,6 @@ fn print_ssid(kind: &str, ssid: Option<&str>) {
   }
 }
 
-fn extract_wifirt_payload(payload: &[u8]) -> Option<&[u8]> {
-  if payload.len() < WFRT_HEADER_LEN {
-    return None;
-  }
-  if &payload[..WFRT_MAGIC.len()] != WFRT_MAGIC {
-    return None;
-  }
-  let len = u16::from_le_bytes([payload[4], payload[5]]) as usize;
-  let start = WFRT_HEADER_LEN;
-  let end = start.checked_add(len)?;
-  payload.get(start..end)
-}
-
 fn hex_bytes(payload: &[u8]) -> String {
   let mut out = String::new();
   for (idx, b) in payload.iter().enumerate() {
@@ -150,27 +136,27 @@ mod tests {
   #[test]
   fn extract_wifirt_payload_ok() {
     let mut bytes = Vec::new();
-    bytes.extend_from_slice(WFRT_MAGIC);
+    bytes.extend_from_slice(b"WFRT");
     bytes.extend_from_slice(&4u16.to_le_bytes());
     bytes.extend_from_slice(&[0xde, 0xad, 0xbe, 0xef]);
     bytes.extend_from_slice(&[0x11, 0x22]);
 
-    let payload = extract_wifirt_payload(&bytes).expect("payload");
+    let payload = decode_wfirt_payload(&bytes).expect("payload");
     assert_eq!(payload, [0xde, 0xad, 0xbe, 0xef]);
   }
 
   #[test]
   fn extract_wifirt_payload_rejects_short() {
     let bytes = [0u8; 5];
-    assert!(extract_wifirt_payload(&bytes).is_none());
+    assert!(decode_wfirt_payload(&bytes).is_none());
   }
 
   #[test]
   fn extract_wifirt_payload_rejects_bad_len() {
     let mut bytes = Vec::new();
-    bytes.extend_from_slice(WFRT_MAGIC);
+    bytes.extend_from_slice(b"WFRT");
     bytes.extend_from_slice(&10u16.to_le_bytes());
     bytes.extend_from_slice(&[0x01, 0x02, 0x03]);
-    assert!(extract_wifirt_payload(&bytes).is_none());
+    assert!(decode_wfirt_payload(&bytes).is_none());
   }
 }

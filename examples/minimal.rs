@@ -4,5 +4,6 @@ use wifirt::{capture, channel, decode};
 async fn main() {
   const DEV: &str = "wlp4s0mon";
   let _capture_task = tokio::spawn(capture::run_capture(DEV, "", decode::handle_packet));
-  channel::hop_channels(DEV).await;
+  // channel::hop_channels(DEV).await;
+  _capture_task.await.unwrap();
 }

@@ -12,6 +12,9 @@ name = "wifirt"
 [[example]]
 name = "minimal"
 
+[[example]]
+name = "inject_demo"
+
 [dependencies]
 ieee80211 = "0.5.9"
 nom = "7.1.3"
