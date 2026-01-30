@@ -1,9 +1,11 @@
-use wifirt::{capture, decode};
+use wifirt::{decode, inject::PcapHandle};
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
   const DEV: &str = "wlp4s0mon";
-  let _capture_task = tokio::spawn(capture::run_capture(DEV, "", decode::handle_packet));
+  let mut handle = PcapHandle::open(DEV, 4096, true, 1000)?;
+  handle.set_filter("")?;
   // channel::hop_channels(DEV).await;
-  _capture_task.await.unwrap();
+  handle.capture_async(decode::handle_packet).await?;
+  Ok(())
 }

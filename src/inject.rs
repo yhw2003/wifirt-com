@@ -2,6 +2,7 @@ use std::{
   ffi::CString,
   os::raw::{c_char, c_int},
   ptr::NonNull,
+  slice,
 };
 
 use thiserror::Error;
@@ -12,11 +13,21 @@ const MINIMAL_RADIOTAP: [u8; 8] = [0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x0
 const MAC_BROADCAST: [u8; 6] = [0xff; 6];
 
 #[derive(Debug, Error)]
-pub enum InjectError {
+pub enum PcapError {
   #[error("device name contains interior NUL")]
   InvalidDeviceName,
+  #[error("filter contains interior NUL")]
+  InvalidFilter,
   #[error("pcap_handle_open returned null")]
   OpenFailed,
+  #[error("pcap_handle_set_filter failed with code {code}")]
+  SetFilterFailed { code: c_int },
+  #[error("pcap_handle_get_dlt failed with code {code}")]
+  GetDltFailed { code: c_int },
+  #[error("pcap_handle_next failed with code {code}")]
+  CaptureFailed { code: c_int },
+  #[error("capture task failed: {0}")]
+  CaptureTaskJoin(String),
   #[error("pcap_send_frame returned {code}")]
   PcapSend { code: c_int },
   #[error("injected {sent} bytes (expected {expected})")]
@@ -26,33 +37,54 @@ pub enum InjectError {
 }
 
 #[repr(C)]
-struct PcapHandleRaw {
+pub(crate) struct PcapHandleRaw {
   _private: [u8; 0],
 }
 
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct PcapPacketView {
+  pub data: *const u8,
+  pub caplen: u32,
+  pub len: u32,
+  pub ts_sec: u64,
+  pub ts_usec: u32,
+}
+
+#[derive(Debug)]
+pub(crate) struct RawPacket {
+  pub data: Vec<u8>,
+  pub caplen: u32,
+  pub len: u32,
+  pub ts_sec: u64,
+  pub ts_usec: u32,
+}
+
 unsafe extern "C" {
-  fn pcap_handle_open(
+  pub(crate) fn pcap_handle_open(
     dev: *const c_char,
     snaplen: c_int,
     promisc: c_int,
     timeout_ms: c_int,
   ) -> *mut PcapHandleRaw;
-  fn pcap_handle_close(handle: *mut PcapHandleRaw);
-  fn pcap_send_frame(handle: *mut PcapHandleRaw, buf: *const u8, len: usize) -> c_int;
+  pub(crate) fn pcap_handle_close(handle: *mut PcapHandleRaw);
+  pub(crate) fn pcap_handle_set_filter(handle: *mut PcapHandleRaw, filter: *const c_char) -> c_int;
+  pub(crate) fn pcap_handle_get_dlt(handle: *const PcapHandleRaw) -> c_int;
+  pub(crate) fn pcap_handle_next(handle: *mut PcapHandleRaw, out: *mut PcapPacketView) -> c_int;
+  pub(crate) fn pcap_send_frame(handle: *mut PcapHandleRaw, buf: *const u8, len: usize) -> c_int;
 }
 
 pub struct PcapHandle {
   raw: NonNull<PcapHandleRaw>,
 }
 
+// The underlying pcap_t is used from a single thread at a time; we only move
+// the handle between threads (never share), so declaring Send is sound.
+unsafe impl Send for PcapHandle {}
+
 impl PcapHandle {
-  pub fn open(
-    dev: &str,
-    snaplen: i32,
-    promisc: bool,
-    timeout_ms: i32,
-  ) -> Result<Self, InjectError> {
-    let dev_c = CString::new(dev).map_err(|_| InjectError::InvalidDeviceName)?;
+  pub fn open(dev: &str, snaplen: i32, promisc: bool, timeout_ms: i32) -> Result<Self, PcapError> {
+    let dev_c = CString::new(dev).map_err(|_| PcapError::InvalidDeviceName)?;
     let raw = unsafe {
       pcap_handle_open(
         dev_c.as_ptr(),
@@ -61,8 +93,55 @@ impl PcapHandle {
         timeout_ms as c_int,
       )
     };
-    let raw = NonNull::new(raw).ok_or(InjectError::OpenFailed)?;
+    let raw = NonNull::new(raw).ok_or(PcapError::OpenFailed)?;
     Ok(Self { raw })
+  }
+
+  pub fn set_filter(&mut self, filter: &str) -> Result<(), PcapError> {
+    let filter_c = CString::new(filter).map_err(|_| PcapError::InvalidFilter)?;
+    let ret = unsafe { pcap_handle_set_filter(self.raw.as_ptr(), filter_c.as_ptr()) };
+    if ret == 0 {
+      Ok(())
+    } else {
+      Err(PcapError::SetFilterFailed { code: ret })
+    }
+  }
+
+  pub fn datalink(&self) -> Result<i32, PcapError> {
+    let ret = unsafe { pcap_handle_get_dlt(self.raw.as_ptr()) };
+    if ret < 0 {
+      Err(PcapError::GetDltFailed { code: ret })
+    } else {
+      Ok(ret)
+    }
+  }
+
+  pub(crate) fn next_raw(&mut self) -> Result<Option<RawPacket>, PcapError> {
+    loop {
+      let mut view = PcapPacketView {
+        data: std::ptr::null(),
+        caplen: 0,
+        len: 0,
+        ts_sec: 0,
+        ts_usec: 0,
+      };
+      let ret = unsafe { pcap_handle_next(self.raw.as_ptr(), &mut view as *mut PcapPacketView) };
+      match ret {
+        0 => {
+          let data = unsafe { slice::from_raw_parts(view.data, view.caplen as usize).to_vec() };
+          return Ok(Some(RawPacket {
+            data,
+            caplen: view.caplen,
+            len: view.len,
+            ts_sec: view.ts_sec,
+            ts_usec: view.ts_usec,
+          }));
+        }
+        1 => continue, // timeout, keep waiting
+        -2 => return Ok(None),
+        code => return Err(PcapError::CaptureFailed { code }),
+      }
+    }
   }
 
   pub fn send_wfirt(
@@ -71,14 +150,14 @@ impl PcapHandle {
     dst: [u8; 6],
     bssid: [u8; 6],
     payload: &[u8],
-  ) -> Result<(), InjectError> {
+  ) -> Result<(), PcapError> {
     let frame = build_wfirt_frame(src, dst, bssid, payload)?;
     let ret = unsafe { pcap_send_frame(self.raw.as_ptr(), frame.as_ptr(), frame.len()) };
     if ret < 0 {
-      return Err(InjectError::PcapSend { code: ret });
+      return Err(PcapError::PcapSend { code: ret });
     }
     if ret as usize != frame.len() {
-      return Err(InjectError::ShortWrite {
+      return Err(PcapError::ShortWrite {
         sent: ret as usize,
         expected: frame.len(),
       });
@@ -109,13 +188,13 @@ pub fn send_wfirt(
   dst: [u8; 6],
   bssid: [u8; 6],
   payload: &[u8],
-) -> Result<(), InjectError> {
+) -> Result<(), PcapError> {
   let handle = PcapHandle::open(dev, 4096, true, 1000)?;
   handle.send_wfirt(src, dst, bssid, payload)
 }
 
 /// Convenience helper: broadcast RA and BSSID matching `src`.
-pub fn send_wfirt_broadcast(dev: &str, src: [u8; 6], payload: &[u8]) -> Result<(), InjectError> {
+pub fn send_wfirt_broadcast(dev: &str, src: [u8; 6], payload: &[u8]) -> Result<(), PcapError> {
   send_wfirt(dev, src, MAC_BROADCAST, src, payload)
 }
 

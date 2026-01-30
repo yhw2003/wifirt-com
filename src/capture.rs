@@ -1,9 +1,3 @@
-use std::{
-  ffi::CString,
-  os::raw::{c_char, c_int, c_void},
-  panic::{self, AssertUnwindSafe},
-};
-
 use ieee80211::{
   GenericFrame,
   common::{FCFFlags, FrameControlField, FrameType, SequenceControl},
@@ -14,9 +8,10 @@ use ieee80211::{
   scroll::ctx::TryFromCtx,
 };
 
-use crate::radiotap::{RtMeta, parse_radiotap};
-
-type PacketCallback = unsafe extern "C" fn(*const u8, u32, u32, u64, u32, *mut c_void);
+use crate::{
+  inject::{PcapError, PcapHandle, RawPacket},
+  radiotap::{RtMeta, parse_radiotap},
+};
 
 pub struct Dot11Meta {
   pub frame_type: FrameType,
@@ -39,75 +34,59 @@ pub struct CapturedPacket<'a> {
   pub dot11: Dot11Meta,
 }
 
-type PacketHandler = Box<dyn for<'a> FnMut(CapturedPacket<'a>) + Send>;
+impl PcapHandle {
+  /// Blocking capture loop on this handle, invoking `handler` for each parsed 802.11 packet.
+  pub fn capture_loop<F>(&mut self, mut handler: F) -> Result<(), PcapError>
+  where
+    F: for<'a> FnMut(CapturedPacket<'a>),
+  {
+    loop {
+      let Some(raw) = self.next_raw()? else {
+        break;
+      };
+      if let Some(packet) = parse_raw_packet(&raw) {
+        handler(packet);
+      }
+    }
+    Ok(())
+  }
 
-struct CaptureCtx {
-  handler: PacketHandler,
+  /// Spawn a blocking capture loop on a dedicated thread.
+  pub async fn capture_async<F>(mut self, handler: F) -> Result<(), PcapError>
+  where
+    F: for<'a> FnMut(CapturedPacket<'a>) + Send + 'static,
+    Self: Send + 'static,
+  {
+    tokio::task::spawn_blocking(move || self.capture_loop(handler))
+      .await
+      .map_err(|err| PcapError::CaptureTaskJoin(err.to_string()))?
+  }
 }
 
-unsafe extern "C" {
-  fn pcap_start_capture(
-    dev: *const c_char,
-    filter: *const c_char,
-    snaplen: c_int,
-    promisc: c_int,
-    timeout_ms: c_int,
-    cb: PacketCallback,
-    user: *mut c_void,
-  ) -> c_int;
-}
-
-pub async fn run_capture<F>(dev: &str, filter: &str, handler: F)
+pub async fn run_capture<F>(dev: &str, filter: &str, handler: F) -> Result<(), PcapError>
 where
   F: for<'a> FnMut(CapturedPacket<'a>) + Send + 'static,
 {
-  let dev = dev.to_string();
-  let filter = filter.to_string();
-  tokio::task::spawn_blocking(move || unsafe {
-    let dev_c = CString::new(dev).expect("device has nul");
-    let filter_c = CString::new(filter).expect("filter has nul");
-    let ctx = Box::new(CaptureCtx {
-      handler: Box::new(handler),
-    });
-    let ctx_ptr = Box::into_raw(ctx) as *mut c_void;
-    let ret = pcap_start_capture(
-      dev_c.as_ptr(),
-      filter_c.as_ptr(),
-      4096,
-      1,
-      1000,
-      on_packet,
-      ctx_ptr,
-    );
-    if !ctx_ptr.is_null() {
-      drop(Box::from_raw(ctx_ptr as *mut CaptureCtx));
+  let mut handle = PcapHandle::open(dev, 4096, true, 1000)?;
+  if !filter.is_empty() {
+    handle.set_filter(filter)?;
+  }
+
+  if let Ok(dlt) = handle.datalink() {
+    const DLT_IEEE802_11_RADIO: i32 = 127;
+    if dlt != DLT_IEEE802_11_RADIO {
+      eprintln!(
+        "Warning: datalink type={} (expected {}). Parsing may fail.",
+        dlt, DLT_IEEE802_11_RADIO
+      );
     }
-    if ret != 0 {
-      eprintln!("pcap_start_capture exited with code {}", ret);
-    }
-  })
-  .await
-  .unwrap();
+  }
+
+  handle.capture_async(handler).await
 }
 
-unsafe extern "C" fn on_packet(
-  data: *const u8,
-  caplen: u32,
-  len: u32,
-  ts_sec: u64,
-  ts_usec: u32,
-  user: *mut c_void,
-) {
-  if data.is_null() || caplen == 0 || user.is_null() {
-    return;
-  }
-  let bytes = unsafe { std::slice::from_raw_parts(data, caplen as usize) };
-  let ctx = unsafe { &mut *(user as *mut CaptureCtx) };
-  if let Some(packet) = parse_packet(bytes, caplen, len, ts_sec, ts_usec) {
-    let _ = panic::catch_unwind(AssertUnwindSafe(|| {
-      (ctx.handler)(packet);
-    }));
-  }
+fn parse_raw_packet(raw: &RawPacket) -> Option<CapturedPacket<'_>> {
+  parse_packet(&raw.data, raw.caplen, raw.len, raw.ts_sec, raw.ts_usec)
 }
 
 fn parse_packet<'a>(

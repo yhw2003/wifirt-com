@@ -3,7 +3,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "pcap_capture.h"
+#include "pcap_handle.h"
 
 #ifdef __cplusplus
 extern "C" {
