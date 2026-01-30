@@ -1,7 +1,7 @@
 use std::error::Error;
 
 use tokio::time::{Duration, sleep};
-use wifirt::inject::PcapHandle;
+use wifirt::pcap::PcapHandle;
 
 const DEFAULT_DEV: &str = "wlx00e04bd3e455";
 const DEFAULT_SRC: [u8; 6] = [0x02, 0x11, 0x22, 0x33, 0x44, 0x55];

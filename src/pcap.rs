@@ -1,12 +1,17 @@
-use std::{
-  ffi::CString,
-  os::raw::{c_char, c_int},
-  ptr::NonNull,
-  slice,
-};
+//! Safe wrappers around the C `pcap-core` helpers plus WFRT frame injection.
+//!
+//! The raw FFI surface lives in [`crate::ffi`]; this module provides a
+//! higher-level API with Rust error handling and owned buffers. Consumers
+//! should use this module instead of calling FFI directly.
+
+use std::{ffi::CString, os::raw::c_int, ptr::NonNull, slice};
 
 use thiserror::Error;
 
+use crate::ffi::{
+  PcapHandleRaw, PcapPacketView, pcap_handle_close, pcap_handle_get_dlt, pcap_handle_next,
+  pcap_handle_open, pcap_handle_set_filter, pcap_send_frame,
+};
 use crate::protocol::{ProtocolError, WFRT_HEADER_LEN, WFRT_MAGIC, encode_wfirt_payload};
 
 const MINIMAL_RADIOTAP: [u8; 8] = [0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00];
@@ -36,21 +41,6 @@ pub enum PcapError {
   Protocol(#[from] ProtocolError),
 }
 
-#[repr(C)]
-pub(crate) struct PcapHandleRaw {
-  _private: [u8; 0],
-}
-
-#[repr(C)]
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct PcapPacketView {
-  pub data: *const u8,
-  pub caplen: u32,
-  pub len: u32,
-  pub ts_sec: u64,
-  pub ts_usec: u32,
-}
-
 #[derive(Debug)]
 pub(crate) struct RawPacket {
   pub data: Vec<u8>,
@@ -58,20 +48,6 @@ pub(crate) struct RawPacket {
   pub len: u32,
   pub ts_sec: u64,
   pub ts_usec: u32,
-}
-
-unsafe extern "C" {
-  pub(crate) fn pcap_handle_open(
-    dev: *const c_char,
-    snaplen: c_int,
-    promisc: c_int,
-    timeout_ms: c_int,
-  ) -> *mut PcapHandleRaw;
-  pub(crate) fn pcap_handle_close(handle: *mut PcapHandleRaw);
-  pub(crate) fn pcap_handle_set_filter(handle: *mut PcapHandleRaw, filter: *const c_char) -> c_int;
-  pub(crate) fn pcap_handle_get_dlt(handle: *const PcapHandleRaw) -> c_int;
-  pub(crate) fn pcap_handle_next(handle: *mut PcapHandleRaw, out: *mut PcapPacketView) -> c_int;
-  pub(crate) fn pcap_send_frame(handle: *mut PcapHandleRaw, buf: *const u8, len: usize) -> c_int;
 }
 
 pub struct PcapHandle {

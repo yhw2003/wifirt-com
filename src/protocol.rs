@@ -1,3 +1,5 @@
+//! WFRT framing helpers (encode/decode) and related constants.
+
 use thiserror::Error;
 
 pub const WFRT_MAGIC: [u8; 4] = *b"WFRT";
@@ -9,6 +11,7 @@ pub enum ProtocolError {
   PayloadTooLong { len: usize },
 }
 
+/// Prefix payload with WFRT magic + length.
 pub fn encode_wfirt_payload(payload: &[u8]) -> Result<Vec<u8>, ProtocolError> {
   if payload.len() > u16::MAX as usize {
     return Err(ProtocolError::PayloadTooLong { len: payload.len() });
@@ -21,6 +24,7 @@ pub fn encode_wfirt_payload(payload: &[u8]) -> Result<Vec<u8>, ProtocolError> {
   Ok(buf)
 }
 
+/// Validate WFRT header and return the payload slice if length matches.
 pub fn decode_wfirt_payload(bytes: &[u8]) -> Option<&[u8]> {
   if bytes.len() < WFRT_HEADER_LEN {
     return None;

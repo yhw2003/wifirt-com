@@ -7,6 +7,8 @@ const CHANNEL_LIST: [u16; 25] = [
   153, 157, 161, 165,
 ];
 
+/// Cycle through the 5GHz channel list, issuing `iw dev <dev> set channel <n>`
+/// once per second. Intended for simple background hopping while capturing.
 pub async fn hop_channels(dev: &str) {
   let mut idx = 0usize;
   loop {

@@ -4,6 +4,8 @@ use nom::{
 };
 use thiserror::Error;
 
+/// Selected radiotap fields parsed into a lightweight struct. Only the fields
+/// we currently use are included; absent flags mean the value is undefined.
 #[derive(Default)]
 pub struct RtMeta {
   pub has_rate: bool,
@@ -23,6 +25,7 @@ pub struct RtMeta {
   pub rt_flags: u8,
 }
 
+/// Errors that can arise while parsing a radiotap header.
 #[derive(Debug, Error)]
 pub enum RadiotapError {
   #[error("radiotap header too short: {0} bytes")]
@@ -43,6 +46,8 @@ fn align_up(off: usize, align: usize) -> usize {
   if r == 0 { off } else { off + (align - r) }
 }
 
+/// Parse the radiotap header at the start of `pkt`, returning the metadata and
+/// the total header length on success.
 pub fn parse_radiotap(pkt: &[u8]) -> Result<(RtMeta, usize), RadiotapError> {
   if pkt.len() < 8 {
     return Err(RadiotapError::TruncatedHeader(pkt.len()));

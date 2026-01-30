@@ -6,6 +6,7 @@ use ieee80211::{
 
 use crate::{capture::CapturedPacket, protocol::decode_wfirt_payload, radiotap::freq_to_channel};
 
+/// Example handler that pretty-prints a captured packet to stdout.
 pub fn handle_packet(packet: CapturedPacket<'_>) {
   println!("=== Packet ===");
   println!(

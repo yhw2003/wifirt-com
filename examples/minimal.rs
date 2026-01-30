@@ -1,4 +1,4 @@
-use wifirt::{decode, inject::PcapHandle};
+use wifirt::{decode, pcap::PcapHandle};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

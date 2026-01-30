@@ -9,10 +9,11 @@ use ieee80211::{
 };
 
 use crate::{
-  inject::{PcapError, PcapHandle, RawPacket},
+  pcap::{PcapError, PcapHandle, RawPacket},
   radiotap::{RtMeta, parse_radiotap},
 };
 
+/// Parsed 802.11 header fields we care about for logging/inspection.
 pub struct Dot11Meta {
   pub frame_type: FrameType,
   pub flags: FCFFlags,
@@ -23,6 +24,7 @@ pub struct Dot11Meta {
   pub sequence_control: Option<SequenceControl>,
 }
 
+/// Fully-parsed view of a captured 802.11 frame with radiotap metadata.
 pub struct CapturedPacket<'a> {
   pub payload: &'a [u8],
   pub caplen: u32,
