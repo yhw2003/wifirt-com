@@ -1,25 +1,23 @@
-use std::{error::Error, sync::Arc, time::Duration};
+use std::error::Error;
 
-use tokio::time::sleep;
-use wifirt::inject;
+use tokio::time::{Duration, sleep};
+use wifirt::inject::PcapHandle;
 
-const DEFAULT_DEV: &str = "wlp199s0f3u1";
+const DEFAULT_DEV: &str = "wlx00e04bd3e455";
 const DEFAULT_SRC: [u8; 6] = [0x02, 0x11, 0x22, 0x33, 0x44, 0x55];
+const BROADCAST: [u8; 6] = [0xff; 6];
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-  let mut cnt = 1;
-  loop {
-    let args: Vec<String> = std::env::args().collect();
-    let dev = args.get(1).map(String::as_str).unwrap_or(DEFAULT_DEV);
-    // let payload = args
-    //   .get(2)
-    //   .map(|s| s.as_bytes().to_vec())
-    //   .unwrap_or_else(|| b"hello from wifirt".to_vec());
-    let payload = format!("Count: {cnt}");
-    let payload = payload.as_bytes();
+  let args: Vec<String> = std::env::args().collect();
+  let dev = args.get(1).map(String::as_str).unwrap_or(DEFAULT_DEV);
 
-    inject::send_wfirt_broadcast(dev, DEFAULT_SRC, &payload)?;
+  let handle = PcapHandle::open(dev, 4096, true, 1000)?;
+  let mut cnt: u64 = 1;
+
+  loop {
+    let payload = format!("Count: {cnt}");
+    handle.send_wfirt(DEFAULT_SRC, BROADCAST, DEFAULT_SRC, payload.as_bytes())?;
     println!(
       "Injected WFRT payload ({} bytes) via {} from {:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
       payload.len(),
@@ -32,6 +30,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
       DEFAULT_SRC[5]
     );
     cnt += 1;
-    Arc::new(sleep(Duration::from_secs_f32(0.5f32)).await);
+    sleep(Duration::from_millis(100)).await;
   }
 }

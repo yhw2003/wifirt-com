@@ -1,6 +1,7 @@
 use std::{
   ffi::CString,
   os::raw::{c_char, c_int},
+  ptr::NonNull,
 };
 
 use thiserror::Error;
@@ -14,6 +15,8 @@ const MAC_BROADCAST: [u8; 6] = [0xff; 6];
 pub enum InjectError {
   #[error("device name contains interior NUL")]
   InvalidDeviceName,
+  #[error("pcap_handle_open returned null")]
+  OpenFailed,
   #[error("pcap_send_frame returned {code}")]
   PcapSend { code: c_int },
   #[error("injected {sent} bytes (expected {expected})")]
@@ -22,8 +25,72 @@ pub enum InjectError {
   Protocol(#[from] ProtocolError),
 }
 
+#[repr(C)]
+struct PcapHandleRaw {
+  _private: [u8; 0],
+}
+
 unsafe extern "C" {
-  fn pcap_send_frame(dev: *const c_char, buf: *const u8, len: usize) -> c_int;
+  fn pcap_handle_open(
+    dev: *const c_char,
+    snaplen: c_int,
+    promisc: c_int,
+    timeout_ms: c_int,
+  ) -> *mut PcapHandleRaw;
+  fn pcap_handle_close(handle: *mut PcapHandleRaw);
+  fn pcap_send_frame(handle: *mut PcapHandleRaw, buf: *const u8, len: usize) -> c_int;
+}
+
+pub struct PcapHandle {
+  raw: NonNull<PcapHandleRaw>,
+}
+
+impl PcapHandle {
+  pub fn open(
+    dev: &str,
+    snaplen: i32,
+    promisc: bool,
+    timeout_ms: i32,
+  ) -> Result<Self, InjectError> {
+    let dev_c = CString::new(dev).map_err(|_| InjectError::InvalidDeviceName)?;
+    let raw = unsafe {
+      pcap_handle_open(
+        dev_c.as_ptr(),
+        snaplen as c_int,
+        if promisc { 1 } else { 0 },
+        timeout_ms as c_int,
+      )
+    };
+    let raw = NonNull::new(raw).ok_or(InjectError::OpenFailed)?;
+    Ok(Self { raw })
+  }
+
+  pub fn send_wfirt(
+    &self,
+    src: [u8; 6],
+    dst: [u8; 6],
+    bssid: [u8; 6],
+    payload: &[u8],
+  ) -> Result<(), InjectError> {
+    let frame = build_wfirt_frame(src, dst, bssid, payload)?;
+    let ret = unsafe { pcap_send_frame(self.raw.as_ptr(), frame.as_ptr(), frame.len()) };
+    if ret < 0 {
+      return Err(InjectError::PcapSend { code: ret });
+    }
+    if ret as usize != frame.len() {
+      return Err(InjectError::ShortWrite {
+        sent: ret as usize,
+        expected: frame.len(),
+      });
+    }
+    Ok(())
+  }
+}
+
+impl Drop for PcapHandle {
+  fn drop(&mut self) {
+    unsafe { pcap_handle_close(self.raw.as_ptr()) };
+  }
 }
 
 /// Build a minimal QoS Data frame carrying a WFRT payload and send it via libpcap.
@@ -43,19 +110,8 @@ pub fn send_wfirt(
   bssid: [u8; 6],
   payload: &[u8],
 ) -> Result<(), InjectError> {
-  let frame = build_wfirt_frame(src, dst, bssid, payload)?;
-  let dev_c = CString::new(dev).map_err(|_| InjectError::InvalidDeviceName)?;
-  let ret = unsafe { pcap_send_frame(dev_c.as_ptr(), frame.as_ptr(), frame.len()) };
-  if ret < 0 {
-    return Err(InjectError::PcapSend { code: ret });
-  }
-  if ret as usize != frame.len() {
-    return Err(InjectError::ShortWrite {
-      sent: ret as usize,
-      expected: frame.len(),
-    });
-  }
-  Ok(())
+  let handle = PcapHandle::open(dev, 4096, true, 1000)?;
+  handle.send_wfirt(src, dst, bssid, payload)
 }
 
 /// Convenience helper: broadcast RA and BSSID matching `src`.
