@@ -10,9 +10,9 @@
 //! - `ffi`: raw FFI boundary to `pcap-core` (unsafe, not re-exported publicly).
 
 pub mod capture;
-pub mod channel;
 pub mod decode;
 pub mod ffi;
 pub mod pcap;
 pub mod protocol;
 pub mod radiotap;
+pub mod utils;
