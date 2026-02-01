@@ -1,7 +1,13 @@
-use wifirt::utils::if_helper::list_wireless_ifaces;
+use wifirt::utils::if_helper::{
+  check_iface_monitor_up, get_interface_hardware, list_wireless_ifaces,
+};
 
 #[tokio::main]
 async fn main() {
   let iface_list = list_wireless_ifaces().await.unwrap();
-  println!("{iface_list:?}");
+  for iface in iface_list {
+    let state = check_iface_monitor_up(&iface).await;
+    let hi = get_interface_hardware(&iface).await;
+    println!("=>找到WIFI网卡: {iface}， 状态： {state:?} {hi:?}");
+  }
 }
