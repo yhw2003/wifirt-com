@@ -138,8 +138,7 @@ define_channels!(
   (WIFI_CHANNEL_165, 165, 5825),
 );
 
-const CHANNEL_LIST: [WifiChannel; 26] = [
-  WifiChannel::WIFI_CHANNEL_1,
+const CHANNEL_LIST: [WifiChannel; 25] = [
   WifiChannel::WIFI_CHANNEL_36,
   WifiChannel::WIFI_CHANNEL_40,
   WifiChannel::WIFI_CHANNEL_44,
