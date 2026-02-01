@@ -1,5 +1,6 @@
 use wifirt::utils::if_helper::{
-  check_iface_monitor_up, get_interface_hardware, list_wireless_ifaces,
+  hardware::get_interface_hardware,
+  wireless::{check_iface_monitor_up, list_wireless_ifaces},
 };
 
 #[tokio::main]
