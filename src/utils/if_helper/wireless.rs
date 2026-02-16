@@ -168,9 +168,7 @@ mod tests {
 
   #[tokio::test]
   async fn status_correct_when_up_and_monitor() {
-    let _serial = crate::utils::if_helper::common::ENV_LOCK
-      .lock()
-      .expect("serial lock");
+    let _serial = crate::utils::if_helper::common::ENV_LOCK.lock().await;
     let temp = tempfile::tempdir().expect("tempdir");
     write_operstate(temp.path(), "wlan0", "up");
     write_stub(
@@ -188,9 +186,7 @@ mod tests {
 
   #[tokio::test]
   async fn status_incorrect_when_not_monitor() {
-    let _serial = crate::utils::if_helper::common::ENV_LOCK
-      .lock()
-      .expect("serial lock");
+    let _serial = crate::utils::if_helper::common::ENV_LOCK.lock().await;
     let temp = tempfile::tempdir().expect("tempdir");
     write_operstate(temp.path(), "wlan1", "up");
     write_stub(temp.path(), "iw", "Interface wlan1\n\ttype managed\n");
@@ -204,9 +200,7 @@ mod tests {
 
   #[tokio::test]
   async fn status_unknown_when_type_missing() {
-    let _serial = crate::utils::if_helper::common::ENV_LOCK
-      .lock()
-      .expect("serial lock");
+    let _serial = crate::utils::if_helper::common::ENV_LOCK.lock().await;
     let temp = tempfile::tempdir().expect("tempdir");
     write_operstate(temp.path(), "wlan2", "up");
     write_stub(temp.path(), "iw", "Interface wlan2\n\tssid test\n");

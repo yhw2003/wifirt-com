@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 #[cfg(test)]
-pub(crate) static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+pub(crate) static ENV_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 pub(crate) fn resolve_program(program: &'static str) -> PathBuf {
   std::env::var_os("IF_HELPER_BIN_DIR")

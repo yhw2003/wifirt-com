@@ -81,9 +81,7 @@ mod tests {
 
   #[tokio::test]
   async fn commands_succeed_with_stubbed_bins() {
-    let _serial = crate::utils::if_helper::common::ENV_LOCK
-      .lock()
-      .expect("serial lock");
+    let _serial = crate::utils::if_helper::common::ENV_LOCK.lock().await;
     let temp = tempfile::tempdir().expect("tempdir");
     write_stub(temp.path(), "ip", "exit 0");
     write_stub(temp.path(), "iw", "exit 0");
@@ -99,9 +97,7 @@ mod tests {
 
   #[tokio::test]
   async fn propagates_non_zero_status() {
-    let _serial = crate::utils::if_helper::common::ENV_LOCK
-      .lock()
-      .expect("serial lock");
+    let _serial = crate::utils::if_helper::common::ENV_LOCK.lock().await;
     let temp = tempfile::tempdir().expect("tempdir");
     write_stub(temp.path(), "ip", "echo fail >&2\nexit 7");
     let _guard = EnvGuard::set_path("IF_HELPER_BIN_DIR", temp.path());
